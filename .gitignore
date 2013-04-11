@@ -36,3 +36,5 @@ fancywindows-pixelated.jpg
 whitewindows-palettized.jpg
 
 whitewindows-pixelated.jpg
+
+*.pyc

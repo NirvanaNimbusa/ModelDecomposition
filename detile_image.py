@@ -94,7 +94,113 @@ def display_grids(*surfs):
 		ax.set_zlabel(name)
 
 		plt.show() # de-indent this if you go back to subplots
+
+def process_edges(edges,smoothed,margin=10):
+	ys,xs=edges.shape
+	mm=margin-1
+	mp=margin+1
+	print xs,ys
+	indices = transpose(np.mgrid[margin:ys-margin,margin:xs-margin],[1,2,0])
+	window = np.dstack((indices+0.5,
+						smoothed[mp:ys-mm,margin:xs-margin] - smoothed[mm:ys-mp,margin:xs-margin],
+						smoothed[margin:ys-margin,mp:xs-mm] - smoothed[margin:ys-margin,mm:xs-mp]))
+	elmct = (xs-2*margin)*(ys-2*margin)
+	flatwindow = np.reshape(window,(elmct,4))
+	ekeep = np.reshape(edges[margin:ys-margin,margin:xs-margin],elmct)>0
+	keepers = flatwindow[ekeep]
+	print "reduced edges",elmct,"to",len(keepers)
+	keepers[:,2:] = transpose(np.array([np.sum(keepers[:,2:]**2,-1)**0.5,np.arctan2(keepers[:,2],keepers[:,3])+0.5*np.pi]))
+	return keepers
+
+def cluster(img,skp,sd,max_original_feature=10000):
+	print "Clustering features"
+	n = len(skp)
+	if not n:
+		return None
+	kmasko = arange(n)
+	kcount = ones(n)
 	
+	n = max(n,max_original_feature)
+	
+	print dir(skp[0])
+	print sd.shape
+	
+#	int i, j, k, maski, maskj;
+#	float rot_diff, size_diff, distx, disty; 
+#	const double d_threshold = _param.sift_clustering_threshold;
+#	const double pi = 3.1415926535897932384626433832795;
+#	const double o_threshold = pi / 18.0;
+#	const double dist_threshold = 48.0;
+#	const double s_max = 1.5, s_min = 1.0 / s_max;
+#	///////////////////////////////////////////
+#	int num = _image->getFeatureNum(); if(num == 0) return;
+#	unsigned char (*des)[128] = (unsigned char (*)[128])_image->getDescriptorData().data();
+#	float (*loc)[5] = (float(*)[5]) _image->getLocationData().data();
+#	_kmasko.resize(0);	_kmasko.resize(num, 0);
+#	_kcount.resize(0);  _kcount.resize(num, 1);
+#	//first step: feature clustering
+#	for(i = 0; i < num; i++) _kmasko[i] = i;
+#
+#	// for speed purpose
+#	// the original feature migh thave 100000 features
+#	num = min(num, _param.max_original_feature);
+#	for(i = 1 ; i < num; i++)
+#	{
+#		for(j = 0; j < i; j++)
+#		{
+#			if(_kmasko[i] == _kmasko[j]) continue;
+#			////////
+#			rot_diff = (float)(fmod(loc[i][4] - loc[j][4] + pi * 3.0, 2.0 * pi) - pi);
+#			if(fabs(rot_diff) > o_threshold) continue;
+#			///////
+#			size_diff = loc[i][3] / loc[j][3];
+#			if(size_diff < s_min || size_diff > s_max) continue;
+#			///
+#			distx = fabs(loc[i][0] -loc[j][0]);
+#			disty = fabs(loc[i][1] - loc[j][1]);
+#
+#
+#			if(max(distx, disty) > dist_threshold * max(loc[i][3], loc[j][3])) continue;
+#
+#			////////
+#			if(MatrixUtil::dotproduct_d(des[i], des[j]) <= d_threshold)continue;
+#
+#
+#			maski = _kmasko[i];
+#			maskj = _kmasko[j];
+#
+#			for(k = 0; k <i; k++)
+#			{
+#				if(_kmasko[k] == maski) _kmasko[k] = maskj;
+#			}
+#			_kmasko[i] = maskj;
+#			_kcount[maskj] += _kcount[maski];
+#			_kcount[maski] = 0;
+#		}
+#	}
+#	//////
+#	_image_modified = 0;
+#}
+	
+def analyze_rep(img):
+	# Assume image is rectified!
+	if 'cv2' not in globals() or 'cv' not in globals():
+		import cv, cv2
+	detector = cv2.FeatureDetector_create("SIFT")
+	descriptor = cv2.DescriptorExtractor_create("SIFT")
+	skp=detector.detect(img)
+	skp,sd=descriptor.compute(img,skp)
+	if not len(skp):
+		return None
+	smoothed = cv2.GaussianBlur(img,(0,0),3*max(1024,*img.shape)/2048.)
+	edges = cv2.Canny(smoothed,0.3,0.8)
+	pedges = process_edges(edges,smoothed)
+	cluster(img,skp,sd)
+	
+	#Image.fromarray(img).show()
+	#Image.fromarray(smoothed).show()
+	#Image.fromarray(edges).show()
+	#
 
 def add_suffix(basename,suffix):
 	return ".".join([
@@ -129,48 +235,50 @@ def main(*args):
 	#oimg.show()
 	oimg.save(add_suffix(basename,"palettized"),quality=100)
 
-	print "Fourier Analysis"
-	four = fft2(indexed)
-	#print "Displaying"
-	#display_grids(("Indexed Colors",indexed,(0,1,0,1)),("Real odd",np.real(four),(1,2,1,2)),("Real even",np.real(four),(2,2,2,2)),
-	#("Imag odd",np.imag(four),(1,2,1,2)),("Imag even",np.imag(four),(2,2,2,2)))
+	#print "Fourier Analysis"
+	#four = fft2(indexed)
+	##print "Displaying"
+	##display_grids(("Indexed Colors",indexed,(0,1,0,1)),("Real odd",np.real(four),(1,2,1,2)),("Real even",np.real(four),(2,2,2,2)),
+	##("Imag odd",np.imag(four),(1,2,1,2)),("Imag even",np.imag(four),(2,2,2,2)))
+	#
+	#afour = np.abs(four)**0.5
+	#
+	#min_x_tile = int(args[4])
+	#min_y_tile = int(args[5])
+	#
+	#print "Min tiling resolution",min_x_tile,"x",min_y_tile
+	#
+	#max_y_freq, max_x_freq = indexed.shape
+	#
+	#xmeans = np.mean(afour,axis=0)[:1+max_x_freq/2]
+	#ymeans = np.mean(afour,axis=1)[:1+max_y_freq/2]
+	#
+	#kxrange = arange((1+max_x_freq/2)/min_x_tile)
+	#kyrange = arange((1+max_y_freq/2)/min_y_tile)
+	#
+	##print xmeans[kxrange]
+	##print ymeans[kyrange]
+	#
+	#xstrider = strider(xmeans[kxrange])
+	#xmmeans = xstrider(kxrange)
+	#ystrider = strider(ymeans[kyrange])
+	#ymmeans = ystrider(kyrange)
+	#
+	#xmaxima = ((np.diff(np.sign(np.diff(xmmeans))) < 0).nonzero()[0] + 1)
+	#ymaxima = ((np.diff(np.sign(np.diff(ymmeans))) < 0).nonzero()[0] + 1)
+	#
+	#print "Suggested tiling schemes"
+	#x_suggest = 1+nargmax(np.apply_along_axis(np.sum,0,np.logical_not(xmaxima[:,np.newaxis] % kxrange[1:])),2)
+	#y_suggest = 1+nargmax(np.apply_along_axis(np.sum,0,np.logical_not(ymaxima[:,np.newaxis] % kyrange[1:])),2)
+	#print "X:",x_suggest,xmmeans[x_suggest]
+	#print "Y:",y_suggest,ymmeans[y_suggest]
+	#
+	#print "Best-guess scheme"
+	#print "X:",x_suggest[np.argmax(xmmeans[x_suggest])]
+	#print "Y:",y_suggest[np.argmax(ymmeans[y_suggest])]
 	
-	afour = np.abs(four)**0.5
-	
-	min_x_tile = int(args[4])
-	min_y_tile = int(args[5])
-	
-	print "Min tiling resolution",min_x_tile,"x",min_y_tile
-	
-	max_y_freq, max_x_freq = indexed.shape
-	
-	xmeans = np.mean(afour,axis=0)[:1+max_x_freq/2]
-	ymeans = np.mean(afour,axis=1)[:1+max_y_freq/2]
-	
-	kxrange = arange((1+max_x_freq/2)/min_x_tile)
-	kyrange = arange((1+max_y_freq/2)/min_y_tile)
-	
-	#print xmeans[kxrange]
-	#print ymeans[kyrange]
-	
-	xstrider = strider(xmeans[kxrange])
-	xmmeans = xstrider(kxrange)
-	ystrider = strider(ymeans[kyrange])
-	ymmeans = ystrider(kyrange)
-	
-	xmaxima = ((np.diff(np.sign(np.diff(xmmeans))) < 0).nonzero()[0] + 1)
-	ymaxima = ((np.diff(np.sign(np.diff(ymmeans))) < 0).nonzero()[0] + 1)
-	
-	print "Suggested tiling schemes"
-	x_suggest = 1+nargmax(np.apply_along_axis(np.sum,0,np.logical_not(xmaxima[:,np.newaxis] % kxrange[1:])),2)
-	y_suggest = 1+nargmax(np.apply_along_axis(np.sum,0,np.logical_not(ymaxima[:,np.newaxis] % kyrange[1:])),2)
-	print "X:",x_suggest,xmmeans[x_suggest]
-	print "Y:",y_suggest,ymmeans[y_suggest]
-	
-	print "Best-guess scheme"
-	print "X:",x_suggest[np.argmax(xmmeans[x_suggest])]
-	print "Y:",y_suggest[np.argmax(ymmeans[y_suggest])]
-	
+	print "Analyzing Repetition (OpenCV)"
+	analyze_rep(indexed.astype(uint8))
 	
 	print "Done"
 	print
@@ -179,3 +287,4 @@ if __name__=="__main__":
 	import sys
 	main(*sys.argv[1:])
 	
+
